@@ -1,0 +1,156 @@
+## import required packages
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import warnings
+warnings.filterwarnings(action='ignore')
+
+# UDF
+from function import metrices_calculation
+
+df = pd.read_csv('Employee-Attrition.csv')
+df.head()
+
+### columns to be dropped
+    'EmployeeNumber' => this is nominal data 
+    'StandardHours' => zero variance
+    'EmployeeCount'=> zero variance
+    'DailyRate', 'HourlyRate' & 'MonthlyRate' should be correlated (further analysis required)
+    'Over18' => zero variance
+    
+# dropping columns
+df.drop(['StandardHours','EmployeeCount','Over18'], axis = 1, inplace = True)
+
+df['Attrition'] = df.Attrition.map({'Yes':1,'No':0})
+df = pd.get_dummies(df) ## OHE encoding
+
+## import sklearn functions
+from sklearn.linear_model import LogisticRegressionCV, LogisticRegression, RidgeClassifierCV,RidgeClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.svm import SVC
+
+from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score, cross_val_predict
+from sklearn.preprocessing import StandardScaler, Normalizer
+from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score
+
+### data splitting into features & target
+X = df.drop(['EmployeeNumber','Attrition'], axis = 1)
+y = df.Attrition
+
+## scaling data
+scaler = StandardScaler()
+scaler.fit(X, y)
+X_ = scaler.transform(X)
+
+### splitting data into train and validation/test sets by 80:20 ratio
+X_train, X_test, y_train, y_test = train_test_split(X_,y,test_size = 0.2, stratify = y, random_state = 42)
+print(X_train.shape,y_train.shape )
+print(X_test.shape,y_test.shape)
+
+model_estimators = [LogisticRegression, RidgeClassifier, RandomForestClassifier, GradientBoostingClassifier, SVC]
+model_names = ['LogisticRegression','RidgeClassifier', 'RandomForest','GradientBoosting','SVC']
+
+### 
+def model(est, name, trainX, trainy):
+    scores = cross_val_score(estimator = est(), X = trainX, y = trainy, scoring = 'accuracy', cv = 5, n_jobs  = -1)
+    print(scores)
+    print('{}: Average scores: {}, standard deviation: {}'.format(name, round(np.mean(scores),5),round(np.std(scores),5)))
+    
+    
+for n,m in zip(model_names, model_estimators):
+    model(m,n, X_train,y_train)
+    
+### 
+def model_(est, name, trainX, trainy, testX, testy):
+    model_ = est().fit(trainX,trainy) 
+    ypred_train = model_.predict(trainX)
+    ypred_test = model_.predict(testX)
+#     precision, recall, fscore, = precision_recall_fscore_support(trainy, ypred_train)
+    print('{}:'.format(name))
+    print('Train: precision={} recall={}, Test: precision={} recall={}'.format(round(precision_score(trainy, ypred_train)*100,3),
+                                                                                 round(recall_score(trainy, ypred_train)*100,3),
+                                                                                  round(precision_score(testy, ypred_test)*100,3),
+                                                                                  round(recall_score(testy, ypred_test)*100,3)))
+          
+    
+ for n,m in  zip(model_names, model_estimators):
+    model_(m,n, X_train,y_train,X_test,y_test )
+    
+ RandomForestClassifier()
+ 
+ #### hyper-parameters of random forest model are: n_estimators,max_depth,min_samples_split,max_leaf_nodes,max_features
+
+
+## model to used (assumed)
+model_rf = RandomForestClassifier(oob_score=True, random_state=42, min_samples_split = 5,)
+
+## parameters to be tunned
+params = {'n_estimators':range(100,200,5),
+         'max_depth':range(2,5,1)}
+gs = GridSearchCV(estimator=model_rf, param_grid=params,scoring='accuracy', n_jobs=-1, cv = 3)
+gs.fit(X_train, y_train)
+tunned_results = pd.DataFrame(gs.cv_results_).sort_values(by = 'mean_test_score', ascending = False )
+
+tunned_results
+
+#### All the above steps can be pipelined to excute in sequence once the model is decided by using PipeLine
+
+from sklearn.pipeline import Pipeline
+
+pipline = Pipeline(steps = [('scaler',StandardScaler()),
+                 ('model',RandomForestClassifier())])
+pipline.fit(X_train, y_train)
+pred_tr = pipline.predict(X_train)
+pred_te = pipline.predict(X_test)
+
+## train metrics
+metrices_calculation(y_train, pred_tr)
+
+print('\n')
+
+## test metrics
+metrices_calculation(y_test, pred_te)
+
+pipline = Pipeline(steps = [('scaler',Normalizer()),
+                 ('model',RandomForestClassifier())])
+pipline.fit(X_train, y_train)
+pred_tr = pipline.predict(X_train)
+pred_te = pipline.predict(X_test)
+
+## train metrics
+metrices_calculation(y_train, pred_tr)
+
+print('\n')
+
+## test metrics
+metrices_calculation(y_test, pred_te)
+
+pipline = Pipeline(steps = [('scaler',Normalizer()),
+                 ('model',LogisticRegression())])
+pipline.fit(X_train, y_train)
+pred_tr = pipline.predict(X_train)
+pred_te = pipline.predict(X_test)
+
+## train metrics
+metrices_calculation(y_train, pred_tr)
+
+print('\n')
+
+## test metrics
+metrices_calculation(y_test, pred_te)
+
+pipline = Pipeline(steps = [('scaler',Normalizer()),
+                 ('model',RidgeClassifier())])
+pipline.fit(X_train, y_train)
+pred_tr = pipline.predict(X_train)
+pred_te = pipline.predict(X_test)
+
+## train metrics
+metrices_calculation(y_train, pred_tr)
+
+print('\n')
+
+## test metrics
+metrices_calculation(y_test, pred_te)
+
